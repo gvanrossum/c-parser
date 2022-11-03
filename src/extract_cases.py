@@ -130,7 +130,7 @@ def read_cases(f):
                 se, diff = figure_stack_effect(opcode_name)
             except ValueError as err:
                 case += f"{indent}// error: {err}\n"
-                case += f"{indent}inst({opcode_name}, (?? -- ??)) {{\n"
+                case += f"{indent}inst({opcode_name}) {{\n"
             else:
                 inputs = []
                 outputs = []
@@ -152,7 +152,8 @@ def read_cases(f):
                         inputs.append(f"__array[oparg*{-diff}]")
                 input = ", ".join(inputs)
                 output = ", ".join(outputs)
-                case += f"{indent}inst({opcode_name}, ({input} -- {output})) {{\n"
+                case += f"{indent}// stack effect: ({input} -- {output})\n"
+                case += f"{indent}inst({opcode_name}) {{\n"
         else:
             if case:
                 case += line
@@ -181,16 +182,16 @@ def write_families(f):
     for opcode, specializations in dis._specializations.items():
         all = [opcode] + specializations
         if len(all) <= 3:
-            members = ', '.join([opcode] + specializations)
-            print(f"family({opcode.lower()}) = {members};", file=f)
+            members = ', '.join(all)
+            print(f"family({opcode.lower()}) = {{ {members} }};", file=f)
         else:
-            print(f"family({opcode.lower()}) =", file=f)
+            print(f"family({opcode.lower()}) = {{", file=f)
             for i in range(0, len(all), 3):
                 members = ', '.join(all[i:i+3])
-                if i+4 < len(all):
+                if i+3 < len(all):
                     print(f"    {members},", file=f)
                 else:
-                    print(f"    {members};", file=f)
+                    print(f"    {members} }};", file=f)
 
 
 def compare(oldfile, newfile, quiet=False):

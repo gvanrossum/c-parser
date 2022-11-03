@@ -1,18 +1,64 @@
 """Parser for bytecodes.inst."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import NamedTuple, Callable, TypeVar
 
 import lexer as lx
-from eparser import Node, contextual
-import sparser
+from plexer import PLexer
+
+
+P = TypeVar("P", bound="Parser")
+N = TypeVar("N", bound="Node")
+def contextual(func: Callable[[P], N|None]) -> Callable[[P], N|None]:
+    # Decorator to wrap grammar methods.
+    # Resets position if `func` returns None.
+    def contextual_wrapper(self: P) -> N|None:
+        begin = self.getpos()
+        res = func(self)
+        if res is None:
+            self.setpos(begin)
+            return
+        end = self.getpos()
+        res.context = Context(begin, end, self)
+        return res
+    return contextual_wrapper
+
+
+class Context(NamedTuple):
+    begin: int
+    end: int
+    owner: PLexer
+
+    def __repr__(self):
+        return f"<{self.begin}-{self.end}>"
+
+
+@dataclass
+class Node:
+    context: Context|None = field(init=False, default=None)
+
+    @property
+    def text(self) -> str:
+        context = self.context
+        if not context:
+            return ""
+        tokens = context.owner.tokens
+        begin = context.begin
+        end = context.end
+        return lx.to_text(tokens[begin:end])
+
+
+@dataclass
+class Block(Node):
+    tokens: list[lx.Token]
 
 
 @dataclass
 class InstDef(Node):
     name: str
-    inputs: list[str]
-    outputs: list[str]
-    block: Node | None
+    inputs: list[str] | None
+    outputs: list[str] | None
+    block: Block | None
 
 
 @dataclass
@@ -21,7 +67,7 @@ class Family(Node):
     members: list[str]
 
 
-class Parser(sparser.SParser):
+class Parser(PLexer):
 
     @contextual
     def inst_def(self) -> InstDef | None:
@@ -34,7 +80,7 @@ class Parser(sparser.SParser):
 
     @contextual
     def inst_header(self):
-        # inst(NAME, (inputs -- outputs))
+        # inst(NAME) | inst(NAME, (inputs -- outputs))
         # TODO: Error out when there is something unexpected.
         # TODO: Make INST a keyword in the lexer.
         if (tkn := self.expect(lx.IDENTIFIER)) and tkn.text == "inst":
@@ -46,6 +92,8 @@ class Parser(sparser.SParser):
                     if (self.expect(lx.RPAREN)
                             and self.peek().kind == lx.LBRACE):
                         return InstDef(name, inp, outp, [])
+                elif self.expect(lx.RPAREN):
+                    return InstDef(name, None, None, [])
         return None
 
     def stack_effect(self):
@@ -133,16 +181,42 @@ class Parser(sparser.SParser):
         self.setpos(here)
         return None
 
+    @contextual
+    def block(self) -> Block:
+        tokens = self.c_blob()
+        return Block(tokens)
+
+    def c_blob(self):
+        tokens = []
+        level = 0
+        while tkn := self.next(raw=True):
+            if tkn.kind in (lx.LBRACE, lx.LPAREN, lx.LBRACKET):
+                level += 1
+            elif tkn.kind in (lx.RBRACE, lx.RPAREN, lx.RBRACKET):
+                level -= 1
+                if level <= 0:
+                    break
+            tokens.append(tkn)
+        return tokens
+
 
 if __name__ == "__main__":
     import sys
-    filename = sys.argv[1]
-    with open(filename) as f:
-        src = f.read()
-    srclines = src.splitlines()
-    begin = srclines.index("// BEGIN BYTECODES //")
-    end = srclines.index("// END BYTECODES //")
-    src = "\n".join(srclines[begin+1 : end])
+    if sys.argv[1:]:
+        filename = sys.argv[1]
+        if filename == "-c" and sys.argv[2:]:
+            src = sys.argv[2]
+            filename = None
+        else:
+            with open(filename) as f:
+                src = f.read()
+            srclines = src.splitlines()
+            begin = srclines.index("// BEGIN BYTECODES //")
+            end = srclines.index("// END BYTECODES //")
+            src = "\n".join(srclines[begin+1 : end])
+    else:
+        filename = None
+        src = "if (x) { x.foo; // comment\n}"
     parser = Parser(src, filename)
     x = parser.inst_def()
     print(x)
