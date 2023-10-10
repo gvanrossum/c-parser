@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import lexer as lx
-from eparser import EParser, contextual, Node, PointerType, ArrayType, FunctionType
+from parsing import contextual, Node
+from eparser import EParser, PointerType, ArrayType, FunctionType
 
 Token = lx.Token
 

@@ -1,6 +1,4 @@
-# C expression parser
-
-from __future__ import annotations
+"""C expression parser."""
 
 from ast import literal_eval
 from dataclasses import dataclass, field
@@ -8,49 +6,9 @@ from typing import NamedTuple, Callable, TypeVar
 
 import lexer as lx
 from plexer import PLexer
+from parsing import contextual, Context, Node
 
 Token = lx.Token
-
-
-T = TypeVar("T", bound="EParser")
-S = TypeVar("S", bound="Node")
-def contextual(func: Callable[[T], S|None]) -> Callable[[T], S|None]:
-    # Decorator to wrap grammar methods.
-    # Resets position if `func` returns None.
-    def contextual_wrapper(self: T) -> S|None:
-        begin = self.getpos()
-        res = func(self)
-        if res is None:
-            self.setpos(begin)
-            return
-        end = self.getpos()
-        res.context = Context(begin, end, self)
-        return res
-    return contextual_wrapper
-
-
-class Context(NamedTuple):
-    begin: int
-    end: int
-    owner: PLexer
-
-    def __repr__(self):
-        return f"<{self.begin}-{self.end}>"
-
-
-@dataclass
-class Node:
-    context: Context|None = field(init=False, default=None)
-
-    @property
-    def text(self) -> str:
-        context = self.context
-        if not context:
-            return ""
-        tokens = context.owner.tokens
-        begin = context.begin
-        end = context.end
-        return lx.to_text(tokens[begin:end])
 
 
 @dataclass
