@@ -108,7 +108,7 @@ escape_sequence = (
 string_char = r"""([^"\\\n]|""" + escape_sequence + ")"
 str_re = '"' + string_char + '*"'
 STRING = "STRING"
-char = r"\'.\'"  # TODO: escape sequence
+char = r"\'([^'\\]|\\[0-7]{1,3}|\\x[0-9a-fA-F]+|\\.|\\\\)\'"
 CHARACTER = "CHARACTER"
 
 comment_re = r"//.*|/\*([^*]|\*[^/])*\*/"
@@ -332,7 +332,16 @@ def to_text(tkns: list[Token], dedent: int = 0) -> str:
         if dedent != 0 and tkn.kind == "COMMENT" and "\n" in text:
             if dedent < 0:
                 text = text.replace("\n", "\n" + " " * -dedent)
-            # TODO: dedent > 0
+            elif dedent > 0:
+                ret = []
+                for line in text.split("\n"):
+                    leading_space = len(line) - len(line.lstrip())
+                    if leading_space > dedent:
+                        line = re.sub(r'(?m)^[ \t]{' + str(dedent) + r'}', '', line)
+                    else:
+                        line = re.sub(r'(?m)^[ \t]{' + str(leading_space) + r'}', '', line)
+                    ret.append(line)
+                text = "\n".join(ret)
         res.append(text)
         line, col = tkn.end
     return "".join(res)
@@ -346,6 +355,6 @@ if __name__ == "__main__":
         src = sys.argv[2]
     else:
         src = open(filename).read()
-    # print(to_text(tokenize(src)))
-    for tkn in tokenize(src, filename=filename):
-        print(tkn)
+    print(to_text(tokenize(src), dedent=200))
+#     for tkn in tokenize(src, filename=filename):
+#         print(tkn)
